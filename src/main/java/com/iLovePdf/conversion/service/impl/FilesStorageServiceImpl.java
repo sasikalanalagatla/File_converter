@@ -184,5 +184,49 @@ public class FilesStorageServiceImpl implements FilesStorageService {
         return outputFile;
     }
 
+    @Override
+    public File convertToJpg(String pdfPath) {
+        Path pdfFilePath = Paths.get(pdfPath);
+        String baseName = pdfFilePath.getFileName().toString().replace(".pdf", "");
+
+        // We'll create a folder for the JPGs: ./uploads/original-filename-images/
+        Path outputDir = pdfFilePath.getParent().resolve(baseName + "-images");
+        try {
+            Files.createDirectories(outputDir);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to create output directory for JPGs: " + e.getMessage(), e);
+        }
+
+        File firstOutputFile = null; // We'll return the first page as the "main" download file
+
+        try (PDDocument document = Loader.loadPDF(pdfFilePath.toFile())) {
+
+            PDFRenderer pdfRenderer = new PDFRenderer(document);
+            int dpi = 150; // 150–300 is good balance (higher = bigger file & better quality)
+
+            for (int page = 0; page < document.getNumberOfPages(); page++) {
+                BufferedImage bim = pdfRenderer.renderImageWithDPI(page, dpi, ImageType.RGB);
+
+                // Output filename: page-1.jpg, page-2.jpg, ...
+                String imageName = String.format("%s-page-%d.jpg", baseName, page + 1);
+                File outputFile = outputDir.resolve(imageName).toFile();
+                ImageIO.write(bim, "jpg", outputFile);
+
+                if (page == 0) {
+                    firstOutputFile = outputFile; // We return the first page for download
+                }
+            }
+
+            if (firstOutputFile == null) {
+                throw new RuntimeException("No pages found in PDF");
+            }
+
+            return firstOutputFile;
+
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to convert PDF to JPG: " + e.getMessage(), e);
+        }
+    }
+
 
 }
