@@ -83,4 +83,23 @@ public class FilesStorageServiceImpl implements FilesStorageService {
 
         return outputFile;
     }
+
+    @Override
+    public File convertToMarkdown(String pdfPath) {
+        String text = extractTextFromPdf(pdfPath);
+        text = text.replaceAll("\r\n", "\n")
+                .replaceAll("\n{3,}", "\n\n")
+                .trim();
+
+        File outputFile = new File(pdfPath.replace(".pdf", ".md"));
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile))) {
+            writer.write(text);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to convert to Markdown: " + e.getMessage(), e);
+        }
+
+        return outputFile;
+    }
+
 }
