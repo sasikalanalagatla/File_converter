@@ -228,5 +228,39 @@ public class FilesStorageServiceImpl implements FilesStorageService {
         }
     }
 
+    @Override
+    public File mergePdfs(List<String> pdfPaths) {
+        if (pdfPaths == null || pdfPaths.isEmpty()) {
+            throw new IllegalArgumentException("No PDF files provided for merging");
+        }
 
+        if (pdfPaths.size() == 1) {
+            return new File(pdfPaths.get(0));
+        }
+
+        String baseName = "merged_" + System.currentTimeMillis();
+        Path outputPath = root.resolve(baseName + ".pdf");
+        File outputFile = outputPath.toFile();
+
+        PDFMergerUtility merger = new PDFMergerUtility();
+        merger.setDestinationFileName(outputFile.getAbsolutePath());
+
+        try {
+            for (String path : pdfPaths) {
+                File pdfFile = new File(path);
+                if (!pdfFile.exists()) {
+                    throw new IOException("PDF file not found: " + path);
+                }
+                merger.addSource(pdfFile);
+            }
+
+            merger.mergeDocuments(null);
+
+            return outputFile;
+
+        } catch (IOException e) {
+            outputFile.delete();
+            throw new RuntimeException("Failed to merge PDFs: " + e.getMessage(), e);
+        }
+    }
 }

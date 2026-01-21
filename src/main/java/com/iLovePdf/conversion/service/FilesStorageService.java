@@ -11,5 +11,5 @@ public interface FilesStorageService {
     File convertToJson(String pdfPath);
     File convertToCsv(String pdfPath);
     File convertToJpg(String pdfPath);
-//    File mergePdfs(List<String> pdfPaths);
+    File mergePdfs(List<String> pdfPaths);
 }
