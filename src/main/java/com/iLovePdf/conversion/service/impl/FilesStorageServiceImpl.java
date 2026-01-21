@@ -66,4 +66,21 @@ public class FilesStorageServiceImpl implements FilesStorageService {
         }
     }
 
+    @Override
+    public File convertToWord(String pdfPath) {
+        String text = extractTextFromPdf(pdfPath);
+        File outputFile = new File(pdfPath.replace(".pdf", ".docx"));
+
+        try (XWPFDocument doc = new XWPFDocument();
+             FileOutputStream out = new FileOutputStream(outputFile)) {
+
+            XWPFParagraph para = doc.createParagraph();
+            para.createRun().setText(text);
+            doc.write(out);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to convert to Word: " + e.getMessage(), e);
+        }
+
+        return outputFile;
+    }
 }
