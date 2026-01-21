@@ -14,12 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.Map;
 
 @Controller
 public class PdfController {
@@ -43,121 +38,27 @@ public class PdfController {
 
         logger.info("Received convert request with format: {}", format);
 
-        List<Path> uploadedPaths = new ArrayList<>();
-
         try {
-            if (files == null || files.length == 0) {
-                logger.warn("No files uploaded");
-                redirectAttributes.addFlashAttribute("error", "Please upload at least one file!");
-                return ResponseEntity.badRequest().body(null);
-            }
+            Map<String, Object> result = storageService.processFiles(files, format);
 
-            // Upload and validate files
-            for (MultipartFile file : files) {
-                if (file == null || file.isEmpty()) continue;
+            byte[] bytes = (byte[]) result.get("bytes");
+            String filename = (String) result.get("filename");
 
-                String filename = file.getOriginalFilename();
-                if (filename == null || !filename.toLowerCase().endsWith(".pdf")) {
-                    logger.warn("Invalid file: {}", filename);
-                    redirectAttributes.addFlashAttribute("error", "Only PDF files are allowed!");
-                    cleanupUploadedFiles(uploadedPaths);
-                    return ResponseEntity.badRequest().body(null);
-                }
-
-                String savedPath = storageService.save(file);
-                uploadedPaths.add(Path.of(savedPath));
-                logger.info("Saved uploaded PDF temporarily: {}", savedPath);
-            }
-
-            if (uploadedPaths.isEmpty()) {
-                redirectAttributes.addFlashAttribute("error", "No valid PDF files uploaded!");
-                return ResponseEntity.badRequest().body(null);
-            }
-
-            byte[] resultBytes;
-            String filename;
-
-            // Multi-file → merge
-            if (uploadedPaths.size() > 1) {
-                resultBytes = storageService.mergePdfsBytes(
-                        uploadedPaths.stream().map(Path::toString).toList());
-                filename = "merged.pdf";
-            } else {
-                // Single file conversion
-                String pdfPath = uploadedPaths.get(0).toString();
-
-                if (format == null || format.trim().isEmpty()) {
-                    logger.warn("No format selected");
-                    redirectAttributes.addFlashAttribute("error", "Please select a format!");
-                    cleanupUploadedFiles(uploadedPaths);
-                    return ResponseEntity.badRequest().body(null);
-                }
-
-                switch (format.toLowerCase()) {
-                    case "jpg":
-                        resultBytes = storageService.convertToJpgBytes(pdfPath);
-                        filename = "pdf-pages.zip";
-                        break;
-
-                    case "word":
-                        resultBytes = storageService.convertToWordBytes(pdfPath);
-                        filename = "converted.docx";
-                        break;
-
-                    case "markdown":
-                        resultBytes = storageService.convertToMarkdownBytes(pdfPath);
-                        filename = "converted.md";
-                        break;
-
-                    case "json":
-                        resultBytes = storageService.convertToJsonBytes(pdfPath);
-                        filename = "converted.json";
-                        break;
-
-                    case "csv":
-                        resultBytes = storageService.convertToCsvBytes(pdfPath);
-                        filename = "converted.csv";
-                        break;
-
-                    case "merge":
-                        // For single file "merge" → just return original
-                        resultBytes = Files.readAllBytes(Path.of(pdfPath));
-                        filename = "original.pdf";
-                        break;
-
-                    default:
-                        logger.warn("Invalid format: {}", format);
-                        redirectAttributes.addFlashAttribute("error", "Invalid format: " + format);
-                        cleanupUploadedFiles(uploadedPaths);
-                        return ResponseEntity.badRequest().body(null);
-                }
-            }
-
-            // Clean up only the uploaded PDFs
-            cleanupUploadedFiles(uploadedPaths);
-
-            // Return the result as download
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                    .body(resultBytes);
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" + filename + "\"")
+                    .body(bytes);
+
+        } catch (IllegalArgumentException e) {
+            logger.warn("Validation failed: {}", e.getMessage());
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
+            return ResponseEntity.badRequest().body(null);
 
         } catch (Exception e) {
             logger.error("Conversion failed", e);
             redirectAttributes.addFlashAttribute("error", "Error during processing: " + e.getMessage());
-            cleanupUploadedFiles(uploadedPaths);
             return ResponseEntity.status(500).body(null);
-        }
-    }
-
-    private void cleanupUploadedFiles(List<Path> paths) {
-        for (Path path : paths) {
-            try {
-                Files.deleteIfExists(path);
-                logger.debug("Deleted uploaded temp file: {}", path);
-            } catch (IOException e) {
-                logger.warn("Failed to delete uploaded temp file: {}", path, e);
-            }
         }
     }
 }

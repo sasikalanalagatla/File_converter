@@ -40,12 +40,6 @@ public class FilesStorageServiceImpl implements FilesStorageService {
                 throw new IllegalArgumentException("File is empty");
             }
 
-            String originalFilename = file.getOriginalFilename();
-            if (originalFilename == null || originalFilename.trim().isEmpty()) {
-                originalFilename = "uploaded_" + System.currentTimeMillis() + ".pdf";
-            }
-
-            // Use system temporary file (no custom folder)
             Path tempFile = Files.createTempFile("pdf-upload-", ".pdf");
             file.transferTo(tempFile.toFile());
 
@@ -229,6 +223,102 @@ public class FilesStorageServiceImpl implements FilesStorageService {
         } catch (IOException e) {
             Files.deleteIfExists(tempMerged);
             throw e;
+        }
+    }
+    @Override
+    public Map<String, Object> processFiles(MultipartFile[] files, String format) {
+
+        List<Path> uploadedPaths = new ArrayList<>();
+
+        try {
+            if (files == null || files.length == 0) {
+                throw new IllegalArgumentException("Please upload at least one file!");
+            }
+
+            for (MultipartFile file : files) {
+                if (file == null || file.isEmpty()) continue;
+
+                String filename = file.getOriginalFilename();
+                if (filename == null || !filename.toLowerCase().endsWith(".pdf")) {
+                    cleanupUploadedFiles(uploadedPaths);
+                    throw new IllegalArgumentException("Only PDF files are allowed!");
+                }
+
+                String savedPath = save(file);
+                uploadedPaths.add(Path.of(savedPath));
+                logger.info("Saved uploaded PDF temporarily: {}", savedPath);
+            }
+
+            if (uploadedPaths.isEmpty()) {
+                throw new IllegalArgumentException("No valid PDF files uploaded!");
+            }
+
+            byte[] resultBytes;
+            String resultFilename;
+
+            if (uploadedPaths.size() > 1) {
+                resultBytes = mergePdfsBytes(
+                        uploadedPaths.stream().map(Path::toString).toList());
+                resultFilename = "merged.pdf";
+            } else {
+                String pdfPath = uploadedPaths.get(0).toString();
+
+                if (format == null || format.trim().isEmpty()) {
+                    throw new IllegalArgumentException("Please select a format!");
+                }
+
+                switch (format.toLowerCase()) {
+                    case "jpg" -> {
+                        resultBytes = convertToJpgBytes(pdfPath);
+                        resultFilename = "pdf-pages.zip";
+                    }
+                    case "word" -> {
+                        resultBytes = convertToWordBytes(pdfPath);
+                        resultFilename = "converted.docx";
+                    }
+                    case "markdown" -> {
+                        resultBytes = convertToMarkdownBytes(pdfPath);
+                        resultFilename = "converted.md";
+                    }
+                    case "json" -> {
+                        resultBytes = convertToJsonBytes(pdfPath);
+                        resultFilename = "converted.json";
+                    }
+                    case "csv" -> {
+                        resultBytes = convertToCsvBytes(pdfPath);
+                        resultFilename = "converted.csv";
+                    }
+                    case "merge" -> {
+                        resultBytes = Files.readAllBytes(Path.of(pdfPath));
+                        resultFilename = "original.pdf";
+                    }
+                    default -> throw new IllegalArgumentException("Invalid format: " + format);
+                }
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("bytes", resultBytes);
+            result.put("filename", resultFilename);
+
+            return result;
+
+        } catch (Exception e) {
+            cleanupUploadedFiles(uploadedPaths);
+            throw new RuntimeException(e.getMessage(), e);
+
+        } finally {
+            cleanupUploadedFiles(uploadedPaths);
+        }
+    }
+
+    private void cleanupUploadedFiles(List<Path> paths) {
+        for (Path path : paths) {
+            try {
+                Files.deleteIfExists(path);
+                logger.debug("Deleted uploaded temp file: {}", path);
+            } catch (IOException e) {
+                logger.warn("Failed to delete uploaded temp file: {}", path, e);
+            }
         }
     }
 }
