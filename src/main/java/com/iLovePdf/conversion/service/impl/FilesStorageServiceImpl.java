@@ -126,5 +126,63 @@ public class FilesStorageServiceImpl implements FilesStorageService {
         return outputFile;
     }
 
+    @Override
+    public File convertToCsv(String pdfPath) {
+        File outputFile = new File(pdfPath.replace(".pdf", ".csv"));
+
+        try (PDDocument document = Loader.loadPDF(new File(pdfPath));
+             PrintWriter writer = new PrintWriter(outputFile)) {
+
+            ObjectExtractor oe = new ObjectExtractor(document);
+            BasicExtractionAlgorithm bea = new BasicExtractionAlgorithm();
+
+            boolean foundAnyTable = false;
+
+            for (int pageNum = 1; pageNum <= document.getNumberOfPages(); pageNum++) {
+                Page page = oe.extract(pageNum);
+                List<Table> tables = bea.extract(page);
+
+                if (!tables.isEmpty()) {
+                    foundAnyTable = true;
+                }
+
+                for (Table table : tables) {
+                    List<List<RectangularTextContainer>> rows = table.getRows();
+                    for (List<RectangularTextContainer> cells : rows) {
+                        for (int i = 0; i < cells.size(); i++) {
+                            String cellText = cells.get(i).getText().trim().replace("\"", "\"\"");
+                            writer.print("\"" + cellText + "\"");
+                            if (i < cells.size() - 1) {
+                                writer.print(",");
+                            }
+                        }
+                        writer.println();
+                    }
+                    writer.println(); // empty line between tables
+                }
+            }
+
+            oe.close();
+
+            // Improved fallback: write full text line-by-line as single-column CSV
+            if (!foundAnyTable) {
+                String fallbackText = extractTextFromPdf(pdfPath);
+                writer.println("\"Extracted Text (No Tables Detected)\"");
+                String[] lines = fallbackText.split("\n");
+                for (String line : lines) {
+                    String trimmed = line.trim();
+                    if (!trimmed.isEmpty()) {
+                        writer.println("\"" + trimmed.replace("\"", "\"\"") + "\"");
+                    }
+                }
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to convert to CSV: " + e.getMessage(), e);
+        }
+
+        return outputFile;
+    }
+
 
 }
