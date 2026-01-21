@@ -2,8 +2,15 @@ package com.iLovePdf.conversion.service.impl;
 
 import com.iLovePdf.conversion.service.FilesStorageService;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.multipdf.PDFMergerUtility;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.graphics.PDXObject;
+import org.apache.pdfbox.pdmodel.graphics.image.JPEGFactory;
+import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -20,11 +27,13 @@ import technology.tabula.Table;
 import technology.tabula.extractors.BasicExtractionAlgorithm;
 
 import javax.imageio.ImageIO;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -292,6 +301,10 @@ public class FilesStorageServiceImpl implements FilesStorageService {
                         resultBytes = Files.readAllBytes(Path.of(pdfPath));
                         resultFilename = "original.pdf";
                     }
+                    case "compress" -> {
+                        resultBytes = compressPdfBytes(pdfPath);
+                        resultFilename = "compressed.pdf";
+                    }
                     default -> throw new IllegalArgumentException("Invalid format: " + format);
                 }
             }
@@ -308,6 +321,92 @@ public class FilesStorageServiceImpl implements FilesStorageService {
 
         } finally {
             cleanupUploadedFiles(uploadedPaths);
+        }
+    }
+    @Override
+    public byte[] compressPdfBytes(String pdfPath) throws IOException {
+        logger.info("Starting PDF compression: {}", pdfPath);
+        long originalSize = Files.size(Path.of(pdfPath));
+
+        Path tempOut = Files.createTempFile("compressed-", ".pdf");
+
+        try (PDDocument doc = Loader.loadPDF(new File(pdfPath))) {
+
+            float jpegQuality = 0.70f;
+            int targetMaxDimension = 1200;
+
+            boolean anyChange = false;
+
+            for (PDPage page : doc.getPages()) {
+                PDResources res = page.getResources();
+                if (res == null) continue;
+
+                Iterable<COSName> xobjNames = res.getXObjectNames();
+                if (xobjNames == null) continue;
+
+                for (COSName name : xobjNames) {
+                    PDXObject xobj = res.getXObject(name);
+                    if (!(xobj instanceof PDImageXObject)) continue;
+
+                    PDImageXObject img = (PDImageXObject) xobj;
+
+                    int w = img.getWidth();
+                    int h = img.getHeight();
+
+                    if (w < 100 || h < 100) continue;
+
+                    BufferedImage bi;
+                    try {
+                        bi = img.getImage();
+                    } catch (Exception e) {
+                        logger.warn("Skipping problematic image: {}", name.getName(), e);
+                        continue;
+                    }
+
+                    if (w > targetMaxDimension || h > targetMaxDimension) {
+                        double scale = (double) targetMaxDimension / Math.max(w, h);
+                        int newW = (int) (w * scale);
+                        int newH = (int) (h * scale);
+
+                        BufferedImage scaled = new BufferedImage(newW, newH, BufferedImage.TYPE_INT_RGB);
+                        Graphics2D g2d = scaled.createGraphics();
+                        g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                        g2d.drawImage(bi, 0, 0, newW, newH, null);
+                        g2d.dispose();
+
+                        bi = scaled;
+                        anyChange = true;
+                    }
+
+                    try {
+                        PDImageXObject compressed = JPEGFactory.createFromImage(doc, bi, jpegQuality);
+                        res.put(name, compressed);
+                        anyChange = true;
+                    } catch (Exception e) {
+                        logger.warn("Failed to JPEG-compress image {} ({}×{}), keeping original", name.getName(), w, h, e);
+                    }
+                }
+            }
+
+            doc.setVersion(Math.max(doc.getVersion(), 1.5f));
+
+            doc.save(tempOut.toString());
+
+            byte[] result = Files.readAllBytes(tempOut);
+            Files.deleteIfExists(tempOut);
+
+            long newSize = result.length;
+            double reduction = originalSize > 0 ? (1.0 - (double) newSize / originalSize) * 100 : 0;
+
+            logger.info("Compression result: {} bytes → {} bytes ({:.1f}% reduction) | images processed: {}",
+                    originalSize, newSize, reduction, anyChange ? "yes" : "no (or none found)");
+
+            return result;
+
+        } catch (Exception e) {
+            Files.deleteIfExists(tempOut);
+            logger.error("Compression failed", e);
+            throw new IOException("PDF compression failed", e);
         }
     }
 

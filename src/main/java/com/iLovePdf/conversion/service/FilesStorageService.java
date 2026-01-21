@@ -23,4 +23,6 @@ public interface FilesStorageService {
     byte[] convertToJpgBytes(String pdfPath) throws IOException;
 
     byte[] mergePdfsBytes(List<String> pdfPaths) throws IOException;
+
+    byte[] compressPdfBytes(String pdfPath) throws IOException;
 }
