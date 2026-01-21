@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>Smart PDF Processor</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+        font-family: Arial, Helvetica, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f7fa;
+        color: #333;
+    }
+    .container {
+        max-width: 500px;
+        margin: 0 auto;
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    h2 {
+        text-align: center;
+        color: #2c3e50;
+        margin-bottom: 25px;
+    }
+    .error-message {
+        background-color: #ffebee;
+        color: #c62828;
+        padding: 12px 15px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        border-left: 4px solid #c62828;
+    }
+    form {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+    }
+    label {
+        font-weight: 600;
+        color: #444;
+    }
+    input[type="file"] {
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        background: #fafafa;
+    }
+    select {
+        padding: 12px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        background: #fff;
+        font-size: 16px;
+    }
+    button {
+        background-color: #27ae60;
+        color: white;
+        border: none;
+        padding: 14px;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background 0.3s;
+    }
+    button:hover {
+        background-color: #219653;
+    }
+    .info-text {
+        font-size: 0.9em;
+        color: #555;
+        line-height: 1.5;
+        margin-top: 8px;
+    }
+    .warning {
+        font-size: 0.92em;
+        color: #e67e22;
+        background: #fff3e0;
+        padding: 10px;
+        border-radius: 6px;
+        margin-top: 10px;
+    }
+    small {
+        color: #777;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>Smart PDF Processor</h2>
+
+  <!-- Error message display -->
+  <div th:if="${error}" class="error-message" th:text="${error}"></div>
+
+  <form th:action="@{/convert}" method="post" enctype="multipart/form-data">
+    <label for="files">Upload PDF file(s)</label>
+    <input type="file" id="files" name="file" accept=".pdf" multiple required />
+
+    <div class="info-text">
+      • Select one PDF for conversion<br>
+      • Select multiple PDFs to merge them<br>
+      • Hold <strong>Ctrl</strong> (Windows) / <strong>Cmd</strong> (Mac) to choose several files at once
+    </div>
+
+    <div class="warning">
+      Note: If you select the wrong file(s), refresh the page (F5) and start over.<br>
+      The browser doesn't allow removing individual files after selection.
+    </div>
+
+    <label for="format">Choose action</label>
+    <select name="format" id="format">
+      <option value="merge" selected>Merge PDFs (recommended when multiple files)</option>
+      <option value="word">Convert to Word (.docx)</option>
+      <option value="markdown">Convert to Markdown (.md)</option>
+      <option value="json">Convert to JSON (.json)</option>
+      <option value="csv">Convert to CSV (.csv)</option>
+      <option value="jpg">Convert to JPG images (one per page)</option>
+    </select>
+
+    <button type="submit">Process & Download</button>
+  </form>
+
+  <div style="margin-top: 30px; text-align: center; font-size: 0.85em; color: #777;">
+    Made with Spring Boot + Thymeleaf • Max file size: ~10MB per file (configurable)
+  </div>
+</div>
+
+</body>
+</html>
