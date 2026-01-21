@@ -102,4 +102,29 @@ public class FilesStorageServiceImpl implements FilesStorageService {
         return outputFile;
     }
 
+    @Override
+    public File convertToJson(String pdfPath) {
+        String text = extractTextFromPdf(pdfPath);
+        String escaped = text.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\b", "\\b")
+                .replace("\f", "\\f")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+
+        String jsonContent = "{\"extractedText\": \"" + escaped + "\"}";
+
+        File outputFile = new File(pdfPath.replace(".pdf", ".json"));
+
+        try (FileWriter writer = new FileWriter(outputFile)) {
+            writer.write(jsonContent);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to convert to JSON: " + e.getMessage(), e);
+        }
+
+        return outputFile;
+    }
+
+
 }

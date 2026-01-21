@@ -8,7 +8,7 @@ public interface FilesStorageService {
     String save(MultipartFile file);
     File convertToWord(String pdfPath);
     File convertToMarkdown(String pdfPath);
-//    File convertToJson(String pdfPath);
+    File convertToJson(String pdfPath);
 //    File convertToCsv(String pdfPath);
 //    File convertToJpg(String pdfPath);
 //    File mergePdfs(List<String> pdfPaths);
